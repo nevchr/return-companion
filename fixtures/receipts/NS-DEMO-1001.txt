@@ -1,0 +1,7 @@
+NORTHSTAR DEMO STORE — SYNTHETIC RECEIPT
+Order: NS-DEMO-1001
+Item: Northstar Wireless Headphones
+Delivered: 2026-09-08
+Item price: CAD 89.99
+Tax paid: CAD 11.70
+This fixture is fictional and contains no personal data.

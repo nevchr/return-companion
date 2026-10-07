@@ -1,0 +1,7 @@
+NORTHSTAR DEMO STORE — SYNTHETIC RECEIPT
+Order: NS-DEMO-1003
+Item: Northstar Studio Headphones
+Delivered: [missing from sample receipt]
+Item price: CAD 129.99
+Tax paid: CAD 16.90
+This fixture is fictional and contains no personal data.

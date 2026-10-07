@@ -1,0 +1,27 @@
+# Local Python environments and caches
+backend/.venv/
+backend/.venv-repair/
+**/__pycache__/
+**/.pytest_cache/
+**/.test-tmp*/
+backend/data/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+
+# Frontend dependencies and generated browser/build output
+frontend/node_modules/
+frontend/dist/
+frontend/.playwright-browsers/
+frontend/test-results/
+frontend/playwright-report/
+
+# Local QA and logs
+.playwright-e2e-tmp/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

@@ -1,0 +1,7 @@
+NORTHSTAR DEMO STORE — SYNTHETIC RECEIPT
+Order: NS-DEMO-1002
+Item: Northstar Travel Headphones
+Delivered: 2026-08-20
+Item price: CAD 59.99
+Tax paid: CAD 7.80
+This fixture is fictional and contains no personal data.
