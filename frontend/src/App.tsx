@@ -78,7 +78,8 @@ function deadlineFor(value: AnyRecord) {
 function moveRadio(event: React.KeyboardEvent<HTMLButtonElement>) {
   if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
   event.preventDefault();
-  const radios = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=radio]") ?? []);
+  const radios = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=radio]") ?? []).filter((radio) => !radio.disabled);
+  if (!radios.length) return;
   const index = radios.indexOf(event.currentTarget);
   const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
   const next = radios[(index + step + radios.length) % radios.length];
@@ -143,8 +144,9 @@ export default function App() {
         setReceiptDateDraft(first.delivery_date ?? '');
       }
       if (activeCase && !preserveActiveCase) {
-        const updated = nextCases.find((item) => item.case_id === activeCase.case_id || item.id === activeCase.id);
-        if (updated) setActiveCase(updated);
+        const activeId = activeCase.case_id ?? activeCase.id;
+        const updated = activeId && nextCases.find((item) => (item.case_id ?? item.id) === activeId);
+        if (updated) applyCaseRecord(updated);
       }
       setError('');
     } catch (cause) {
@@ -169,9 +171,25 @@ export default function App() {
   const caseId = activeCase?.case_id ?? activeCase?.id;
   const currentOfferId = activeCase?.offer?.offer_id ?? activeCase?.offer_id;
   const currentStatus = String(activeCase?.state ?? activeCase?.status ?? '').toUpperCase();
-  const canSubmit = Boolean(approval) && currentStatus === 'AWAITING_APPROVAL';
+  const canSubmit = Boolean(approval) && activeCase?.order_id === selectedOrder && currentStatus === 'AWAITING_APPROVAL';
+  const evidenceLocked = busy || (Boolean(activeCase) && currentStatus !== 'NEEDS_INFO');
   const timeline = activeCase?.events ?? activeCase?.timeline ?? activeCase?.history ?? [];
   const currentInstructions = activeCase?.instructions ?? activeCase?.return?.instructions;
+
+  function clearConversation() {
+    setChatHistory([]); setChatReply(''); setToolTrace([]); setToolResults([]);
+    setFallbackReason(''); setAgentStatus('fake');
+  }
+
+  function selectPurchase(order: AnyRecord) {
+    const id = order.order_id ?? order.id;
+    if (actionLock.current || selectedOrder === id) return;
+    clearConversation();
+    setSelectedOrder(id); setReceiptDateDraft(order.delivery_date ?? '');
+    setReceiptReviewed(false); setAccessoriesComplete(false);
+    setActiveCase(null); setOffers([]); setSelectedOffer('');
+    setApproval(null); setApproved(false); setError(''); setNotice('');
+  }
 
   async function request(path: string, method = 'GET', body?: AnyRecord) {
     const response = await fetch(path, {
@@ -222,11 +240,12 @@ export default function App() {
 
   async function refreshOffer() {
     if (!caseId || !beginAction()) return;
-    setError(''); setNotice(''); setApproval(null); setApproved(false);
+    setError(''); setNotice('');
     try {
       const result = await request(`/api/cases/${encodeURIComponent(caseId)}/offers`, 'POST', {});
       const refreshedCase = result.case ?? result;
       const nextOffers = refreshedCase.offer?.options ?? result.eligibility?.options ?? [];
+      setApproval(null); setApproved(false);
       setActiveCase({ ...refreshedCase, eligibility_result: result.eligibility ?? refreshedCase.eligibility_result });
       setOffers(nextOffers);
       setSelectedOffer(nextOffers[0]?.option_id ?? '');
@@ -271,17 +290,20 @@ export default function App() {
 
   async function loadCase(id: string) {
     const result = await request(`/api/cases/${encodeURIComponent(id)}`);
-    setActiveCase(result.case ?? result);
-    const record = result.case ?? result;
+    applyCaseRecord(result.case ?? result);
+  }
+
+  function applyCaseRecord(record: AnyRecord) {
+    setActiveCase(record);
     if (record.order_evidence) {
       setReceiptDateDraft(record.order_evidence.delivery_date ?? '');
       setReceiptReviewed(true);
       setAccessoriesComplete(Boolean(record.accessories_complete));
     }
     const list = asList(record, 'offers', 'options');
-    if (list.length) setOffers(list);
-    else if (Array.isArray(record.offer?.options)) setOffers(record.offer.options);
+    setOffers(list.length ? list : (record.offer?.options ?? []));
     setApproval(record.approval ?? null);
+    setApproved(Boolean(record.approval));
     const approvedTerms = record.approval?.terms_hash;
     const approvedOffer = approvedTerms && (record.offer?.options ?? list).find((offer: AnyRecord) => offer.terms_hash === approvedTerms);
     setSelectedOffer(approvedOffer?.offer_id ?? approvedOffer?.option_id ?? approvedOffer?.id ?? '');
@@ -289,10 +311,23 @@ export default function App() {
 
   async function openCase(item: AnyRecord) {
     const id = item.case_id ?? item.id;
-    if (!id) return;
-    if (selectedOrder !== (item.order_id ?? '')) { setChatHistory([]); setChatReply(''); setToolTrace([]); setToolResults([]); setFallbackReason(''); setAgentStatus('fake'); }
-    setError(''); setNotice(''); setSelectedOrder(item.order_id ?? ''); setActiveCase(item); setOffers(item.offers ?? item.options ?? []); setApproval(item.approval ?? null); setSelectedOffer('');
-    try { await loadCase(id); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not open saved case.'); }
+    if (!id || !beginAction()) return;
+    setError(''); setNotice('');
+    try {
+      await loadCase(id);
+      if (caseId !== id) clearConversation();
+      setSelectedOrder(item.order_id ?? '');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not open saved case.'); }
+    finally { endAction(); }
+  }
+
+  async function refreshSavedProgress() {
+    if (!beginAction()) return;
+    try {
+      if (caseId) await loadCase(caseId);
+      await refresh(true);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not refresh saved progress.'); }
+    finally { endAction(); }
   }
 
   async function sendChat(event: React.FormEvent<HTMLFormElement>) {
@@ -331,6 +366,7 @@ export default function App() {
           const proposal = facts.case;
           if (!proposal?.case_id) throw new Error('The proposal tool returned no persisted case.');
           setActiveCase({ ...proposal, eligibility_result: facts.eligibility });
+          setApproval(null); setApproved(false);
           const nextOffers = proposal.offer?.options ?? facts.eligibility?.options ?? [];
           setOffers(nextOffers);
           setSelectedOffer(nextOffers[0]?.offer_id ?? nextOffers[0]?.option_id ?? nextOffers[0]?.id ?? '');
@@ -416,15 +452,16 @@ export default function App() {
               {orders.map((order) => {
                 const id = order.order_id ?? order.id;
                 const selected = selectedOrder === id;
-                return <button key={id} type="button" role="radio" tabIndex={selected ? 0 : -1} aria-checked={selected} onKeyDown={moveRadio} className={`order-option ${selected ? 'selected' : ''}`} onClick={() => { if (selectedOrder !== id) { setChatHistory([]); setChatReply(''); setToolTrace([]); setToolResults([]); setFallbackReason(''); setAgentStatus('fake'); } setSelectedOrder(id); setReceiptDateDraft(order.delivery_date ?? ''); setReceiptReviewed(false); setAccessoriesComplete(false); }}>
+                return <button key={id} type="button" role="radio" tabIndex={selected ? 0 : -1} aria-checked={selected} disabled={busy} onKeyDown={moveRadio} className={`order-option ${selected ? 'selected' : ''}`} onClick={() => selectPurchase(order)}>
                   <span className="product-thumb" aria-hidden="true"><span>♫</span></span><span className="order-details"><strong>{order.product_name ?? order.name ?? 'Sample purchase'}</strong><span>Order {id} <b>·</b> Delivered {displayDate(order.delivery_date)}</span></span><span className="order-price">{money(order.paid_total_cents ?? ((order.item_cents ?? 0) + (order.tax_cents ?? 0)), order.currency)}</span><span className={`radio-dot ${selected ? 'checked' : ''}`} aria-hidden="true" />
                 </button>;
               })}
             </div>}
             <div className="order-evidence"><span className="checkmark" aria-hidden="true">OK</span><span><strong>Synthetic receipt loaded</strong><small>Local text fixture; no upload or personal data</small></span><span className="evidence-tag">SAMPLE</span></div>
-            {selectedOrderRecord && receiptSamples[selectedOrder] && <details open className="receipt-preview"><summary>Review and edit extracted receipt fields</summary><pre>{receiptSamples[selectedOrder].text}</pre><label className="receipt-date-edit">Delivery date from this synthetic receipt<input type="date" value={receiptDateDraft} onChange={(event) => { setReceiptDateDraft(event.target.value); setReceiptReviewed(false); }} /></label>{!receiptDateDraft && <p className="receipt-missing">No delivery date is present. Leave blank to ask policy for manual review, enter a date only if you can confirm it from this synthetic receipt; otherwise leave it blank.</p>}<small>Extracted from {receiptSamples[selectedOrder].fixture_name}. Verified in fixture: {(receiptSamples[selectedOrder].verified_fields ?? []).join(", ") || "no required fields"}.</small></details>}
-            <label className="receipt-review-check"><input type="checkbox" checked={receiptReviewed} onChange={(event) => setReceiptReviewed(event.target.checked)} /><span>I reviewed the synthetic receipt and its extracted fields.</span></label>
-            <label className="accessories-check"><input type="checkbox" checked={accessoriesComplete} onChange={(event) => setAccessoriesComplete(event.target.checked)} /><span><strong>All required accessories are included</strong><small>Confirm this from the sample order details. If unchecked, the policy pauses for review.</small></span></label>
+            {selectedOrderRecord && receiptSamples[selectedOrder] && <details open className="receipt-preview"><summary>Review and edit extracted receipt fields</summary><pre>{receiptSamples[selectedOrder].text}</pre><label className="receipt-date-edit">Delivery date from this synthetic receipt<input type="date" disabled={evidenceLocked} value={receiptDateDraft} onChange={(event) => { setReceiptDateDraft(event.target.value); setReceiptReviewed(false); }} /></label>{!receiptDateDraft && <p className="receipt-missing">No delivery date is present. Leave blank to ask policy for manual review, enter a date only if you can confirm it from this synthetic receipt; otherwise leave it blank.</p>}<small>Extracted from {receiptSamples[selectedOrder].fixture_name}. Verified in fixture: {(receiptSamples[selectedOrder].verified_fields ?? []).join(", ") || "no required fields"}.</small></details>}
+            <label className="receipt-review-check"><input type="checkbox" checked={receiptReviewed} disabled={evidenceLocked} onChange={(event) => setReceiptReviewed(event.target.checked)} /><span>I reviewed the synthetic receipt and its extracted fields.</span></label>
+            <label className="accessories-check"><input type="checkbox" checked={accessoriesComplete} disabled={evidenceLocked} onChange={(event) => setAccessoriesComplete(event.target.checked)} /><span><strong>All required accessories are included</strong><small>Confirm this from the sample order details. If unchecked, the policy pauses for review.</small></span></label>
+            {activeCase && currentStatus !== 'NEEDS_INFO' && <p className="policy-footnote">Reviewed receipt evidence is saved with this proposal.</p>}
             <button className="button button-primary start-button" disabled={!selectedOrder || !receiptReviewed || busy} onClick={startCase}>{busy ? 'Checking policy.' : receiptReviewed ? 'Check return options' : 'Review the receipt to continue'}<span aria-hidden="true">→</span></button>
           </article>
 
@@ -435,28 +472,28 @@ export default function App() {
               {currentOffers.map((offer: AnyRecord, index: number) => {
                 const id = offer.offer_id ?? offer.option_id ?? offer.id ?? `option-${index}`;
                 const chosen = selectedOffer === id || (!selectedOffer && index === 0);
-                return <button className={`offer-option ${chosen ? 'selected' : ''}`} key={id} role="radio" tabIndex={chosen ? 0 : -1} aria-checked={chosen} onKeyDown={moveRadio} onClick={() => { setSelectedOffer(id); setApproval(null); setApproved(false); }}>
+                return <button className={`offer-option ${chosen ? 'selected' : ''}`} key={id} role="radio" tabIndex={chosen ? 0 : -1} aria-checked={chosen} disabled={busy || Boolean(approval) || currentStatus !== 'AWAITING_APPROVAL'} onKeyDown={moveRadio} onClick={() => { setSelectedOffer(id); setApproved(false); }}>
                   <span className={`offer-icon ${index ? 'replacement' : ''}`} aria-hidden="true">{index ? '↻' : '↗'}</span><span className="offer-copy"><strong>{offer.title ?? offer.label ?? (String(offer.option_id ?? '').includes('replace') ? 'Replacement' : 'Refund to original payment')}</strong><small>{offer.method_label ?? (offer.method_id === 'demo_mail' ? 'Free demo mail' : 'Free demo drop-off')}{offer.fee_cents ? ` · ${money(offer.fee_cents, offer.currency)}` : ' · No fee'}</small></span><span className="offer-amount">{typeof amountFor(offer) === 'number' ? money(amountFor(offer), offer.currency) : '—'}<small>estimated</small></span><span className={`radio-dot ${chosen ? 'checked' : ''}`} aria-hidden="true" />
                 </button>;
               })}
             </div> : <div className="empty-state">No return option is available. Check the policy result and case details.</div>}
             <div className="terms-grid"><div><small>RETURN BY</small><strong>{displayDate(activeCase.offer?.deadline_at ?? deadlineFor(chosenOffer ?? activeCase))}</strong></div><div><small>OFFER EXPIRES</small><strong>{displayDateTime(activeCase.offer?.expires_at)}</strong></div><div><small>POLICY REFERENCE</small><strong>Northstar-v1: {(chosenOffer?.clause_ids ?? activeCase.eligibility_result?.clause_ids ?? ['R1']).join(', ')}</strong></div><div><small>METHOD</small><strong>{chosenOffer?.method_label ?? (chosenOffer?.method_id === 'demo_mail' ? 'Demo mail' : 'Demo drop-off')}</strong></div><div><small>RETURN FEE</small><strong>{money(chosenOffer?.fee_cents ?? 0, chosenOffer?.currency)}</strong></div></div>
-            {currentStatus === 'AWAITING_APPROVAL' && <div className="offer-refresh"><button className="text-button" disabled={busy} onClick={refreshOffer}>Refresh offer and require new approval</button><small>Refreshing replaces the offer and clears any approval on the previous terms.</small></div>}
+            {currentStatus === 'AWAITING_APPROVAL' && <div className="offer-refresh"><button className="text-button" disabled={busy} onClick={refreshOffer}>Refresh offer and require new approval</button><small>{approval ? 'To choose a different option, refresh the offer and approve it again.' : 'Refreshing replaces the offer and clears any approval on the previous terms.'}</small></div>}
             <label className="approval-check"><input type="checkbox" checked={approved} disabled={!chosenOffer || busy || Boolean(approval)} onChange={(event) => setApproved(event.target.checked)} /><span className="custom-check" aria-hidden="true">✓</span><span>I’ve reviewed this estimate and want to approve this exact option.</span></label>
             {!approval ? <button className="button button-secondary" disabled={!approved || !chosenOffer || busy} onClick={approveOffer}>{busy ? 'Recording approval…' : 'Approve this option'}<span aria-hidden="true">→</span></button> : canSubmit ? <div className="approved-note"><span aria-hidden="true">✓</span> Option approved. Your confirmation is still required below.</div> : null}
             <p className="policy-footnote">This is an estimate from fictional policy text. The simulation does not promise or issue a refund.</p>
           </article>}
 
-          {activeCase && canSubmit && <article className="confirm-panel"><div className="confirm-heading"><span className="confirm-lock" aria-hidden="true">⌑</span><div><p className="eyebrow">FINAL STEP · YOUR CHOICE</p><h2>Ready to submit the simulation?</h2></div></div><p>Only this button records the mock return request. Your approval above does not submit it.</p><button className="button button-danger" disabled={busy} onClick={submitReturn}>{busy ? 'Submitting simulation…' : 'Confirm simulated return'}<span aria-hidden="true">→</span></button><small>No real return, refund, or shipping label will be created.</small></article>}
+          {activeCase && canSubmit && <article className="confirm-panel"><div className="confirm-heading"><span className="confirm-lock" aria-hidden="true">⌑</span><div><p className="eyebrow">FINAL STEP · YOUR CHOICE</p><h2>Ready to submit the simulation?</h2></div></div><p>Confirm here or ask the guide "Please submit the approved return." Your approval above does not submit it.</p><button className="button button-danger" disabled={busy} onClick={submitReturn}>{busy ? 'Submitting simulation…' : 'Confirm simulated return'}<span aria-hidden="true">→</span></button><small>No real return, refund, or shipping label will be created.</small></article>}
 
           {activeCase && (activeCase.return || activeCase.label_text || activeCase.label || currentStatus === 'AWAITING_DROPOFF' || activeCase.return_id) && <article className="card label-card"><div className="label-head"><span className="label-symbol" aria-hidden="true">▤</span><div><p className="eyebrow">MOCK RETURN LABEL</p><h2>Return instructions</h2></div><span className="label-stamp">DEMO ONLY</span></div><div className="invalid-label">DEMO ONLY - NOT VALID FOR SHIPPING</div><div className="return-id">Mock return ID: <code>{activeCase.return?.return_id ?? activeCase.return_id ?? "pending"}</code></div><p>{Array.isArray(currentInstructions) ? currentInstructions.join(' / ') : activeCase.label_text ?? activeCase.label ?? 'Pack the item with its required accessories. In this simulation, mark it dropped off using the demo control.'}</p>{deadlineFor(activeCase) && <div className="label-deadline">Drop-off by <strong>{displayDate(deadlineFor(activeCase))}</strong></div>}<a className="label-download" href={`/api/cases/${encodeURIComponent(caseId)}/label`} download="northstar-demo-invalid-label.txt">Download invalid demo label (text)</a></article>}
         </section>
 
         <aside className="side-column">
-          <section className="card case-card"><div className="side-title"><span className="side-icon" aria-hidden="true">◷</span><div><p className="eyebrow">YOUR CASE</p><h2>Saved progress</h2></div><button className="refresh-button" onClick={() => { void refresh(); if (caseId) void loadCase(caseId); }} aria-label="Refresh saved progress" title="Refresh">↻</button></div>
+          <section className="card case-card"><div className="side-title"><span className="side-icon" aria-hidden="true">◷</span><div><p className="eyebrow">YOUR CASE</p><h2>Saved progress</h2></div><button className="refresh-button" disabled={busy || loading} onClick={() => void refreshSavedProgress()} aria-label="Refresh saved progress" title="Refresh">↻</button></div>
             {!cases.length && !activeCase ? <div className="case-empty"><div className="empty-illustration" aria-hidden="true">◌</div><strong>No cases yet</strong><span>Start with a sample purchase and your progress will appear here.</span></div> : <>
               {activeCase && <div className="active-case-summary"><div className="case-status-line"><span className="status-dot" /><span>{statusLabel(currentStatus || 'DRAFT')}</span></div><strong>{selectedOrderRecord?.product_name ?? activeCase.product_name ?? 'Northstar headphones'}</strong><span>Case {caseId}</span>{activeCase.next_action && <div className="next-action"><small>NEXT STEP</small><strong>{activeCase.next_action}</strong>{activeCase.next_action_due_at && <span>Due {displayDate(activeCase.next_action_due_at)}</span>}</div>}</div>}
-              <div className="saved-case-list">{cases.map((item) => { const id = item.case_id ?? item.id; return <button key={id} className={`saved-case ${caseId === id ? 'active' : ''}`} onClick={() => void openCase(item)}><span className="saved-case-dot" /><span><strong>{item.product_name ?? item.order_id ?? `Case ${id}`}</strong><small>{statusLabel(item.state ?? item.status ?? 'DRAFT')} · {id}</small></span><span aria-hidden="true">›</span></button>; })}</div>
+              <div className="saved-case-list">{cases.map((item) => { const id = item.case_id ?? item.id; return <button key={id} disabled={busy} className={`saved-case ${caseId === id ? 'active' : ''}`} onClick={() => void openCase(item)}><span className="saved-case-dot" /><span><strong>{item.product_name ?? item.order_id ?? `Case ${id}`}</strong><small>{statusLabel(item.state ?? item.status ?? 'DRAFT')} · {id}</small></span><span aria-hidden="true">›</span></button>; })}</div>
             </>}
           </section>
           {activeCase && <section className="card timeline-card"><div className="side-title"><span className="side-icon timeline-icon" aria-hidden="true">☷</span><div><p className="eyebrow">CASE HISTORY</p><h2>Activity</h2></div></div>

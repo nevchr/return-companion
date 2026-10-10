@@ -54,8 +54,19 @@ test('reviews evidence, uses policy tools, refreshes approval, submits once, and
   await page.locator('.approval-check').click();
   await page.getByRole('button', { name: 'Approve this option' }).click();
   await expect(page.getByText(/Option approved/)).toBeVisible();
-  await page.getByRole('button', { name: 'Confirm simulated return' }).click();
+  await chat.fill('Send return instructions.');
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(page.locator('.tool-trace code')).toHaveText('check_return_options');
+  await expect(page.locator('.invalid-label')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Confirm simulated return' })).toBeEnabled();
+  if (isMobile) {
+    await chat.fill('Please submit the approved return.');
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  } else {
+    await page.getByRole('button', { name: 'Confirm simulated return' }).click();
+  }
   await expect(page.locator('.invalid-label')).toHaveText('DEMO ONLY - NOT VALID FOR SHIPPING');
+  await expect(page.locator('.tool-trace code')).toHaveText('submit_simulated_return');
   await expect(page.locator(".label-card p:not(.eyebrow)")).toContainText("Pack the fictional headphones");
 
   const downloadPromise = page.waitForEvent('download');

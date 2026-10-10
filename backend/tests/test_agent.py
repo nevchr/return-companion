@@ -86,6 +86,60 @@ def test_fake_submit_intent_requires_explicit_imperative():
         )).tool_name == GET_SAMPLE_ORDER
 
 
+@pytest.mark.parametrize("message", [
+    "Send return instructions.",
+    "Confirm the deadline for my return.",
+    "Submit the approved return?",
+    "Submit the approved return tomorrow.",
+    "Submit the approved return if it is eligible.",
+    "Submit the approved return, but do not actually submit it.",
+    '"Submit the approved return."',
+    "Please submit the approved return unless there is a fee.",
+])
+def test_advice_questions_and_conditional_commands_do_not_submit(message):
+    selector = DeterministicFakeToolSelector()
+    selection = run(selector.select_tool_with_tools(message, [], {
+        GET_SAMPLE_ORDER, CHECK_RETURN_OPTIONS, PREPARE_RETURN_PROPOSAL, SUBMIT_SIMULATED_RETURN,
+    }))
+    assert selection.tool_name != SUBMIT_SIMULATED_RETURN
+
+
+@pytest.mark.parametrize("message", [
+    "Do not prepare a return proposal.",
+    "How do I start a return?",
+    "Prepare a return proposal?",
+    "Prepare a return proposal later.",
+])
+def test_advice_and_negated_commands_do_not_prepare_proposals(message):
+    selection = run(DeterministicFakeToolSelector().select_tool(message, []))
+    assert selection.tool_name != PREPARE_RETURN_PROPOSAL
+
+
+@pytest.mark.parametrize("message", [
+    "Please submit the approved return.",
+    "Confirm the simulated return for this approved case.",
+    "Submit my return now!",
+    "  SUBMIT   THE APPROVED RETURN.  ",
+    "File the simulated return request, please.",
+])
+def test_clear_present_commands_allow_submission_when_tool_is_available(message):
+    selector = DeterministicFakeToolSelector()
+    assert run(selector.select_tool_with_tools(
+        message, [], {GET_SAMPLE_ORDER, SUBMIT_SIMULATED_RETURN},
+    )).tool_name == SUBMIT_SIMULATED_RETURN
+    assert run(selector.select_tool_with_tools(
+        message, [], {GET_SAMPLE_ORDER, CHECK_RETURN_OPTIONS},
+    )).tool_name != SUBMIT_SIMULATED_RETURN
+
+
+@pytest.mark.parametrize("message", [
+    "Prepare a return proposal for this sample order.",
+    "Please start a return.", "Open a case.", "Create a return request now!",
+])
+def test_clear_present_commands_prepare_a_proposal(message):
+    assert run(DeterministicFakeToolSelector().select_tool(message, [])).tool_name == PREPARE_RETURN_PROPOSAL
+
+
 @pytest.mark.parametrize(
     ("payload", "reason"),
     [

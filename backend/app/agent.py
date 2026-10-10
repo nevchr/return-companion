@@ -1,6 +1,6 @@
 """Local tool-selection adapters for the synthetic Return Companion demo.
 
-Providers select only a read-only tool name. Tool arguments returned by a model
+Providers select only a bounded tool name. Tool arguments returned by a model
 are deliberately discarded; application code builds arguments from validated
 request fields and executes policy in Python.
 """
@@ -53,7 +53,7 @@ class DeterministicFakeToolSelector:
     ) -> Selection:
         del history
         lower = message.lower()
-        if re.search(r"\b(?:prepare|start|begin|open|create|initiate)\b", lower) and re.search(r"\b(?:return|case|request)\b", lower):
+        if is_explicit_prepare_intent(message):
             return Selection(PREPARE_RETURN_PROPOSAL, "fake")
         if any(word in lower for word in ("eligible", "return", "refund", "policy", "option", "can i")):
             return Selection(CHECK_RETURN_OPTIONS, "fake")
@@ -69,13 +69,30 @@ class DeterministicFakeToolSelector:
         return selected if selected.tool_name in available else Selection(GET_SAMPLE_ORDER, "fake")
 
 
+def _explicit_action(message: str, verbs: str, target: str) -> bool:
+    """Accept one present imperative with a direct target and bounded wording.
+
+    Full matching deliberately excludes questions, quotations, conditions, deferred
+    actions and extra clauses. Asking to send instructions or confirm a deadline
+    must never become consent to submit. The confirmation button uses this grammar.
+    """
+    article = r"(?:(?:a|an|the|my|this)\s+)?"
+    modifiers = r"(?:(?:approved|simulated|simulation|sample|synthetic|demo)\s+)*"
+    context = rf"(?:\s+for\s+{article}{modifiers}(?:order|case|purchase))?"
+    return bool(re.fullmatch(
+        rf"(?:please\s+)?(?:{verbs})\s+{article}{modifiers}(?:{target})"
+        rf"(?:\s+now)?{context}(?:\s+now)?(?:,?\s+please)?[.!]?",
+        message.strip(), re.IGNORECASE,
+    ))
+
+
+def is_explicit_prepare_intent(message: str) -> bool:
+    return _explicit_action(message, "prepare|start|begin|open|create|initiate",
+                            r"return(?:\s+(?:proposal|request))?|case|request")
+
+
 def is_explicit_submit_intent(message: str) -> bool:
-    """Recognize an imperative confirmation, not a question or quoted refusal."""
-    if re.match(r"^\s*(?:please\s+)?(?:do not|don't|never|cannot|can't|won't)\b", message, re.IGNORECASE):
-        return False
-    command = re.match(r"^\s*(?:please\s+)?(?:confirm|submit|send|file)\b", message, re.IGNORECASE)
-    target = re.search(r"\b(?:simulated?|simulation|approved|return)\b", message, re.IGNORECASE)
-    return bool(command and target)
+    return _explicit_action(message, "confirm|submit|send|file", r"return(?:\s+request)?")
 
 
 def _validate_loopback_url(base_url: str) -> str:

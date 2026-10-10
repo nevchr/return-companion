@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .policy import evaluate_eligibility
 from .agent import (BASE_AGENT_TOOLS, PREPARE_RETURN_PROPOSAL, SUBMIT_SIMULATED_RETURN,
-                    build_provider_from_env, is_explicit_submit_intent)
+                    build_provider_from_env, is_explicit_prepare_intent, is_explicit_submit_intent)
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = ROOT / "fixtures"
@@ -380,8 +380,7 @@ async def chat(body: ChatRequest) -> dict[str, Any]:
         # The model may help with phrasing; explicit intent plus server-verified approval governs execution.
         selection = type(selection)(SUBMIT_SIMULATED_RETURN, selection.status, selection.fallback_reason)
     tool_name = selection.tool_name
-    explicit_prepare = bool(re.search(r"\b(?:prepare|start|begin|open|create|initiate)\b", body.message, re.IGNORECASE) and
-                            re.search(r"\b(?:return|case|request)\b", body.message, re.IGNORECASE))
+    explicit_prepare = is_explicit_prepare_intent(body.message)
     if tool_name == PREPARE_RETURN_PROPOSAL and not explicit_prepare:
         tool_name = "check_return_options"
     if tool_name == SUBMIT_SIMULATED_RETURN:

@@ -2,7 +2,7 @@
 
 ## Deterministic default
 
-The default provider is `deterministic_fake_tool_simulation`. It makes no model call and deterministically selects one of three tools from the request: sample lookup, policy check, or persisted proposal preparation when the user explicitly asks to prepare/start a return. Tool arguments are built from the selected synthetic order and reviewed form fields by Python and the browser client.
+The default provider is `deterministic_fake_tool_simulation`. It makes no model call and deterministically selects sample lookup, policy check, or persisted proposal preparation when the user explicitly asks to prepare/start a return. A fourth tool, simulated submission, is available only after Python verifies saved approval and a present imperative confirmation. Tool arguments are built from validated synthetic evidence and saved state by Python.
 
 ## Optional local Ollama
 
@@ -35,4 +35,8 @@ Ask **“Prepare a return proposal for this sample order.”** The app checks th
 
 ## Explicit approval and simulation
 
-Select an exact option, tick the approval checkbox and choose **Approve this option**. The API verifies the active offer ID, terms hash, case revision and expiry before persisting the approval. Only the separate **Confirm simulated return** button calls `submit_simulated_return` over MCP. Python verifies the approval again and checks the expiry, revision, offer, idempotency key and unique sample item before it records `AWAITING_DROPOFF`. No retailer, payment system, carrier, or shipping label is contacted.
+Select an exact option, tick the approval checkbox and choose **Approve this option**. The API verifies the active offer ID, terms hash, case revision and expiry before persisting the approval. Then use **Confirm simulated return**, or ask **"Please submit the approved return."** Python verifies the approval before supplying the MCP arguments, and the MCP handler checks expiry, revision, offer, idempotency key and unique sample item again before recording `AWAITING_DROPOFF`. No retailer, payment system, carrier, or shipping label is contacted.
+
+The shared deterministic intent gate requires a complete present command with a direct target. It rejects questions, negations, quotations, conditions, deferred actions and extra clauses. "Send return instructions" and "Confirm the deadline for my return" cannot become submission consent, even if a model selects the submission tool. Conservative wording may leave other phrasing read only; use the documented commands or the button. A model still cannot approve or override policy facts.
+
+Reviewed evidence remains locked to the saved proposal. An approved option stays selected until the user refreshes the offer and approves new terms. Switching purchases clears displayed case, approval and conversation state without deleting saved cases. Controls that change evidence or case selection are disabled during an in-flight workflow action.

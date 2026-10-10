@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from app.agent import CHECK_RETURN_OPTIONS, Selection
 from app import main
@@ -366,4 +367,59 @@ def test_assistant_refuses_an_expired_approved_offer(tmp_path, monkeypatch):
         assert result["tool_calls"] == []
         assert "expired" in result["reply"].lower()
         assert client.get(f"/api/cases/{case_id}").json()["return"] is None
+
+
+@pytest.mark.parametrize("message", [
+    "Send return instructions.", "Confirm the deadline for my return.",
+    "Submit the approved return?", "Submit the approved return tomorrow.",
+])
+def test_model_cannot_turn_ambiguous_chat_into_approved_submission(tmp_path, monkeypatch, message):
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "cases.sqlite3")
+
+    class OvereagerSelector:
+        provider_id = "test_local_selector"
+
+        async def select_tool(self, _message, _history):
+            return Selection("submit_simulated_return", "fake")
+
+    monkeypatch.setattr(main, "MODEL", OvereagerSelector())
+    with TestClient(main.app) as client:
+        created = client.post("/api/cases", json={"order_id": "NS-DEMO-1001", "receipt_reviewed": True}).json()
+        case_id = created["case_id"]
+        offered = client.post(f"/api/cases/{case_id}/offers").json()["case"]
+        approved = client.post(f"/api/cases/{case_id}/approve", json={
+            "offer_id": offered["offer"]["offer_id"],
+            "terms_hash": offered["offer"]["options"][0]["terms_hash"],
+            "expected_revision": offered["revision"],
+        }).json()
+        result = client.post("/api/chat", json={
+            "message": message, "order_id": "NS-DEMO-1001", "case_id": case_id,
+        }).json()
+        assert all(call["name"] != "submit_simulated_return" for call in result["tool_calls"])
+        current = client.get(f"/api/cases/{case_id}").json()
+        assert current["state"] == "AWAITING_APPROVAL"
+        assert current["return"] is None
+        assert current["approval"] == approved["approval"]
+        assert current["timeline"] == approved["timeline"]
+
+
+@pytest.mark.parametrize("message", [
+    "Do not prepare a return proposal.", "How do I start a return?", "Prepare a return proposal?",
+])
+def test_model_cannot_create_proposal_from_negation_or_question(tmp_path, monkeypatch, message):
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "cases.sqlite3")
+
+    class OvereagerSelector:
+        provider_id = "test_local_selector"
+
+        async def select_tool(self, _message, _history):
+            return Selection("prepare_return_proposal", "fake")
+
+    monkeypatch.setattr(main, "MODEL", OvereagerSelector())
+    with TestClient(main.app) as client:
+        result = client.post("/api/chat", json={
+            "message": message, "order_id": "NS-DEMO-1001", "receipt_reviewed": True,
+        }).json()
+        assert result["tool_calls"][0]["name"] == "check_return_options"
+        assert client.get("/api/demo").json()["cases"] == []
 

@@ -461,3 +461,11 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .text-button:disabled { opacity: .55; cursor: wait; }
 .offer-refresh small { color: #52635c; font-size: 11px; }
 .label-download { display: inline-block; margin-top: 12px; color: #075f4d; font-size: 12px; font-weight: 700; }
+
+/* Saved evidence and approval guidance must remain readable in the dark skin. */
+.app-shell[data-design="extravagant"] .order-price,
+.app-shell[data-design="extravagant"] .offer-amount,
+.app-shell[data-design="extravagant"] .receipt-review-check,
+.app-shell[data-design="extravagant"] .offer-refresh small,
+.app-shell[data-design="extravagant"] .confirm-panel > p,
+.app-shell[data-design="extravagant"] .confirm-panel > small { color: #e3d9e8; }

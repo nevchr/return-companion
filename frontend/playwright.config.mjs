@@ -11,6 +11,7 @@ const isolatedDir = mkdtempSync(join(tmpdir(), 'return-companion-e2e-'));
 const databasePath = join(isolatedDir, 'cases.sqlite3');
 const candidatePythons = [
   resolve(backendDir, '.venv/Scripts/python.exe'),
+  resolve(backendDir, '.venv/bin/python'),
 ];
 const python = process.env.RETURN_COMPANION_E2E_PYTHON
   ?? candidatePythons.find((candidate) => existsSync(candidate))
@@ -40,7 +41,7 @@ export default defineConfig({
       command: `${quotedPython} -m uvicorn app.main:app --host 127.0.0.1 --port 8011`,
       cwd: backendDir,
       url: 'http://127.0.0.1:8011/api/health',
-      env: { RETURN_COMPANION_DB: databasePath },
+      env: { RETURN_COMPANION_DB: databasePath, RETURN_COMPANION_MODEL_PROVIDER: 'fake' },
       reuseExistingServer: false,
       timeout: 60_000,
     },
