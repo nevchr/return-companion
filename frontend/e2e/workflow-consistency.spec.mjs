@@ -88,9 +88,9 @@ for (const design of ['Quiet Ledger', 'Return Observatory', 'Field Notes']) {
     await expect(page.getByRole('button', { name: 'Ask', exact: true })).toBeEnabled();
     await page.unroute('**/api/chat');
 
-    // A network failure must not erase the displayed, still-persisted approval.
+    // An acknowledged rejection must preserve the displayed, still-persisted approval.
     await page.route(`**/api/cases/${caseId}/offers`, (route) => route.fulfill({
-      status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Synthetic test failure' }),
+      status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Synthetic test failure' }),
     }));
     await page.getByRole('button', { name: 'Refresh offer and require new approval' }).click();
     await expect(page.getByRole('alert')).toContainText('Synthetic test failure');

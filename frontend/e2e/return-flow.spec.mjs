@@ -60,13 +60,58 @@ test('reviews evidence, uses policy tools, refreshes approval, submits once, and
   await expect(page.locator('.invalid-label')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Confirm simulated return' })).toBeEnabled();
   if (isMobile) {
+    let submissions = 0;
+    await page.route('**/mcp', async (route) => {
+      const body = route.request().postDataJSON();
+      if (body.method !== 'tools/call' || body.params?.name !== 'submit_simulated_return') { await route.continue(); return; }
+      submissions++;
+      const response = await route.fetch();
+      const payload = await response.json();
+      await route.fulfill({ response, json: { ...payload, result: { ...payload.result, structuredContent: { ...payload.result.structuredContent, simulation: false, state: 'DRAFT' } } } });
+    });
     await chat.fill('Please submit the approved return.');
     await page.getByRole('button', { name: 'Ask', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Outcome unconfirmed' })).toBeVisible();
+    await expect(page.locator('.invalid-label')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Check saved progress', exact: true }).click();
+    await expect(page.locator('.invalid-label')).toHaveText('DEMO ONLY - NOT VALID FOR SHIPPING');
+    expect(submissions).toBe(1);
+    await page.unroute('**/mcp');
   } else {
-    await page.getByRole('button', { name: 'Confirm simulated return' }).click();
+    // Commit the synthetic submission, then lose its response. Recovery may read
+    // the same case but must never dispatch a second submission.
+    let release;
+    let committed;
+    let submitted = 0;
+    const held = new Promise((resolve) => { release = resolve; });
+    const accepted = new Promise((resolve) => { committed = resolve; });
+    await page.route('**/mcp', async (route) => {
+      const body = route.request().postDataJSON();
+      if (body.method !== 'tools/call' || body.params?.name !== 'submit_simulated_return') {
+        await route.continue(); return;
+      }
+      submitted++;
+      const response = await route.fetch();
+      committed();
+      await held;
+      await route.fulfill({ response }).catch(() => {}); // Original request has timed out.
+    });
+    try {
+      await page.getByRole('button', { name: 'Confirm simulated return' }).click();
+      await accepted;
+      await expect(page.getByRole('heading', { name: 'Outcome unconfirmed' })).toBeVisible();
+      await expect(page.locator('.confirm-panel button')).toBeDisabled();
+      expect(submitted).toBe(1);
+      await page.getByRole('button', { name: 'Check saved progress', exact: true }).click();
+      await expect(page.locator('.invalid-label')).toHaveText('DEMO ONLY - NOT VALID FOR SHIPPING');
+      await expect(page.getByRole('heading', { name: 'Outcome unconfirmed' })).toHaveCount(0);
+      expect(submitted).toBe(1);
+    } finally {
+      release();
+      await page.unroute('**/mcp');
+    }
   }
   await expect(page.locator('.invalid-label')).toHaveText('DEMO ONLY - NOT VALID FOR SHIPPING');
-  await expect(page.locator('.tool-trace code')).toHaveText('submit_simulated_return');
   await expect(page.locator(".label-card p:not(.eyebrow)")).toContainText("Pack the fictional headphones");
 
   const downloadPromise = page.waitForEvent('download');

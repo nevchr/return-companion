@@ -463,6 +463,26 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .label-download { display: inline-block; margin-top: 12px; color: #075f4d; font-size: 12px; font-weight: 700; }
 
 /* Saved evidence and approval guidance must remain readable in the dark skin. */
+.request-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 16px; padding: 14px 18px; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; background: var(--card, #fff); }
+.request-controls > span { flex: 1 1 220px; font-size: 13px; }
+.request-controls small { flex-basis: 100%; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.request-controls .button, .recovery-actions .button { width: auto; min-height: 42px; margin: 0; padding: 10px 16px; }
+.recovery-panel { margin: 0 0 20px; padding: 20px; border: 2px solid #a16a17; border-radius: 10px; color: #483313; background: #fff9ec; }
+.recovery-panel h2 { margin: 4px 0 12px; color: #483313; font-size: 22px; }
+.recovery-panel > p, .recovery-panel > small { display: block; max-width: 850px; margin: 10px 0; font-size: 13px; line-height: 1.6; }
+.recovery-panel > .eyebrow { color: #775016; font-size: 11px; }
+.recovery-panel dl { display: flex; flex-wrap: wrap; gap: 16px 34px; margin: 14px 0; }
+.recovery-panel dl > div { min-width: 180px; }
+.recovery-panel dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.recovery-panel dd { margin: 4px 0 0; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 8px; }
+.recovery-panel .button-secondary { color: #483313; border-color: #94621d; background: #fffdf8; }
+.app-shell[data-design="extravagant"] .recovery-panel { color: #fff1d4; border-color: #d5ad64; background: #332b24; }
+.app-shell[data-design="extravagant"] .recovery-panel h2, .app-shell[data-design="extravagant"] .recovery-panel > .eyebrow { color: #ffe0a4; }
+.app-shell[data-design="extravagant"] .recovery-panel .button-secondary { color: #fff1d4; border-color: #d5ad64; background: #332b24; }
+.app-shell[data-design="extravagant"] .request-controls { color: #f4edf4; border-color: #625570; background: #211d30; }
+.app-shell[data-design="extravagant"] .request-controls small { color: #d8cde0; }
+
 .app-shell[data-design="extravagant"] .order-price,
 .app-shell[data-design="extravagant"] .offer-amount,
 .app-shell[data-design="extravagant"] .receipt-review-check,

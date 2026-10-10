@@ -10,6 +10,8 @@ const backendDir = resolve(frontendDir, '../backend');
 const isolatedDir = mkdtempSync(join(tmpdir(), 'return-companion-e2e-'));
 const databasePath = join(isolatedDir, 'cases.sqlite3');
 const candidatePythons = [
+  resolve(backendDir, '.venv-repair/Scripts/python.exe'),
+  resolve(backendDir, '.venv-repair/bin/python'),
   resolve(backendDir, '.venv/Scripts/python.exe'),
   resolve(backendDir, '.venv/bin/python'),
 ];
@@ -49,7 +51,7 @@ export default defineConfig({
       command: 'npm run dev -- --host 127.0.0.1 --port 5174 --strictPort',
       cwd: frontendDir,
       url: 'http://127.0.0.1:5174',
-      env: { VITE_API_PROXY_TARGET: 'http://127.0.0.1:8011' },
+      env: { VITE_API_PROXY_TARGET: 'http://127.0.0.1:8011', VITE_REQUEST_TIMEOUT_MS: '2000' },
       reuseExistingServer: false,
       timeout: 60_000,
     },

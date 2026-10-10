@@ -23,7 +23,7 @@ The Vite development server proxies `/api/*` and `/mcp` to the loopback FastAPI 
 - `get_sample_order` returns one known synthetic order.
 - `check_return_options` evaluates saved facts using the deterministic policy.
 - `prepare_return_proposal` requires explicit receipt review, validated evidence, and an idempotency key. It creates or reuses a local draft and its policy offer. Reusing a key with different inputs is rejected.
-- `submit_simulated_return` requires a persisted server-issued approval ID and an idempotency key. It routes through the same checks as the UI and can only create a simulated return. The model selector never receives this tool; the browser invokes it only after the person approves the displayed terms.
+- `submit_simulated_return` requires a persisted server-issued approval ID and an idempotency key. It routes through the same checks as the UI and can only create a simulated return. The API exposes this tool to the selector only after verifying a saved, current, unexpired user approval and an explicit present confirmation; Python supplies the submission arguments, and the MCP handler rechecks them before recording a simulation.
 
 The browser MCP client initializes, sends `notifications/initialized`, calls `tools/list`, then calls the selected tool over Streamable HTTP. It negotiates version `2025-11-25`, requests JSON or SSE, sends `MCP-Protocol-Version` after initialization, and handles JSON and SSE results. The server is stateless, omits `MCP-Session-Id`, and returns HTTP 202 for accepted notifications. Origin checks permit loopback web origins only.
 

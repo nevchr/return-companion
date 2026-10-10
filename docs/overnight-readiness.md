@@ -1,6 +1,6 @@
 # Overnight local readiness milestone
 
-Date: 2026-10-10. This milestone is local and unpublished. All purchases, policy, approvals, returns, labels and lifecycle events remain synthetic. No accounts, credentials, paid services, retailer requests, video, deployment or hackathon submission were used.
+Date: 2026-10-10. This completed local milestone was subsequently published separately as commit `af443f6`. All purchases, policy, approvals, returns, labels and lifecycle events remain synthetic. No accounts, credentials, paid services, retailer requests, video, deployment or hackathon submission were used in its implementation. The newer timeout-recovery work is local and unpublished; see [request recovery](request-recovery.md).
 
 ## Starting state and scope
 
@@ -65,4 +65,4 @@ The suite uses separate loopback ports 8011 and 5174 and a disposable database. 
 
 See [verification](verification.md) for final commands and results. Browser screenshots and traces are temporary QA artifacts, separate from the three existing design-gallery screenshots.
 
-The shared `contracts/api.md` has an older sentence saying the model selector never receives submission, while its later chat section describes the current approval-gated capability correctly. It was left unchanged under AGENTS.md's coordinator rule for shared contracts. The next documentation review should align that sentence. A later reliability milestone can add bounded REST request timeouts and a recovery regression; MCP calls already have a timeout, but the plain REST fetch wrapper does not.
+The later local recovery milestone corrects the shared contract sentence to describe the verified approval-gated selector behavior, bounds complete REST/MCP operations, and adds explicit cancellation and uncertain-outcome recovery. See [request recovery](request-recovery.md) and [verification](verification.md) for its separate evidence and remaining gates.
